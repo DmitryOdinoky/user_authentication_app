@@ -1,6 +1,7 @@
 import sqlite3
 import hashlib
 import secrets
+#import uuid
 
 class UserAuthenticationApp:
     def __init__(self, db_name=':memory:'):
@@ -26,17 +27,17 @@ class UserAuthenticationApp:
 
         return activation_token
 
-    def activate_user(self, activation_token):
-        # Activate user by token
-        self.c.execute("UPDATE users SET activated = 1 WHERE activation_token = ?", (activation_token,))
+    def confirm_registration(self, email, activation_token):
+        # Verify activation token and activate user
+        self.c.execute("UPDATE users SET activated = 1 WHERE email = ? AND activation_token = ?", (email, activation_token))
         self.conn.commit()
 
     def authenticate_user(self, email, password):
         # Hash provided password
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
-        # Check if email and password combination exists
-        self.c.execute("SELECT * FROM users WHERE email = ? AND password = ?", (email, hashed_password))
+        # Check if email and password combination exists and user is activated
+        self.c.execute("SELECT * FROM users WHERE email = ? AND password = ? AND activated = 1", (email, hashed_password))
         user = self.c.fetchone()
 
         if user:
@@ -50,27 +51,31 @@ class UserAuthenticationApp:
 # Testing
 def test_user_authentication_app():
     app = UserAuthenticationApp(db_name=':memory:')
+    all_tests_passed = True
     
     # Test user registration
     activation_token = app.register_user("test@example.com", "password123")
-    assert len(activation_token) == 43  # Adjusting length check to actual length
+    if len(activation_token) != 43:
+        all_tests_passed = False
 
-    # Test user activation
-    app.activate_user(activation_token)
-    app.c.execute("SELECT * FROM users WHERE activation_token = ?", (activation_token,))
+    # Test user confirmation
+    app.confirm_registration("test@example.com", activation_token)
+    app.c.execute("SELECT * FROM users WHERE email = ?", ("test@example.com",))
     user = app.c.fetchone()
-    assert user[4] == 1  # Check if user is activated
+    if user[4] != 1:
+        all_tests_passed = False
 
     # Test user authentication
-    assert app.authenticate_user("test@example.com", "password123") == True
-    assert app.authenticate_user("test@example.com", "wrongpassword") == False
+    if not app.authenticate_user("test@example.com", "password123"):
+        all_tests_passed = False
+    if app.authenticate_user("test@example.com", "wrongpassword"):
+        all_tests_passed = False
 
     # Close database connection
     app.close_connection()
 
-# Run tests and print "Tests passed" or "Tests failed" accordingly
-if __name__ == "__main__":
-    # Run tests
-    test_user_authentication_app()
+    return all_tests_passed
 
+# Execute the tests
+if test_user_authentication_app():
     print("Tests passed")
