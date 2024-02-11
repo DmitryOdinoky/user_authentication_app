@@ -2,9 +2,10 @@ import sqlite3
 import hashlib
 import secrets
 import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 class UserAuthenticationApp:
-    def __init__(self, db_name=':memory:'):
+    def __init__(self, db_name='users.db'):
         self.conn = sqlite3.connect(db_name)
         self.c = self.conn.cursor()
         self.create_users_table()
@@ -15,6 +16,10 @@ class UserAuthenticationApp:
         self.conn.commit()
 
     def register_user(self, email, password):
+        # Check if the user already exists
+        if self.user_exists(email):
+            return "User already registered"
+
         # Hash password
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
@@ -69,38 +74,37 @@ class UserAuthenticationApp:
         # Simulate authentication API request
         return self.authenticate_user(email, password)
 
-# Testing
-def test_user_authentication_app():
-    app = UserAuthenticationApp(db_name=':memory:')
-    all_tests_passed = True
-    
-    # Test registration API
-    activation_url = app.simulate_registration_api("test@example.com", "password123")
-    print("Activation URL:", activation_url)
+    def user_exists(self, email):
+        self.c.execute("SELECT * FROM users WHERE email = ?", (email,))
+        return self.c.fetchone() is not None
 
-    # Test confirmation API
-    activation_token = activation_url.split('=')[1]
-    app.simulate_confirmation_api("test@example.com", activation_token)
-    app.c.execute("SELECT * FROM users WHERE email = ?", ("test@example.com",))
-    user = app.c.fetchone()
-    if user[4] != 1:
-        all_tests_passed = False
+class RequestHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        data = urllib.parse.parse_qs(post_data)
+        email = data.get('email', [None])[0]
+        password = data.get('password', [None])[0]
+        
+        if email and password:
+            activation_url = app.simulate_registration_api(email, password)
+            activation_url = activation_url.replace("<html><body>", "").replace("</body></html>", "")
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(activation_url.encode('utf-8'))
+        else:
+            self.send_response(400)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write("Missing email or password".encode('utf-8'))
 
-    # Test authentication API
-    if not app.simulate_authentication_api("test@example.com", "password123"):
-        all_tests_passed = False
-    if app.simulate_authentication_api("test@example.com", "wrongpassword"):
-        all_tests_passed = False
+def run_server(server_class=HTTPServer, handler_class=RequestHandler, port=8000):
+    server_address = ('', port)
+    httpd = server_class(server_address, handler_class)
+    print(f'Starting server on port {port}...')
+    httpd.serve_forever()
 
-    # Close database connection
-    app.close_connection()
-
-    return all_tests_passed
-
-
-
-
-testing = test_user_authentication_app()
-# Execute the tests
-if testing:
-    print("Tests passed")
+if __name__ == '__main__':
+    app = UserAuthenticationApp()
+    run_server()

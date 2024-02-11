@@ -1,4 +1,5 @@
 import requests
+import urllib.parse
 
 def register_user(email, password):
     url = 'http://localhost:8000/register'
@@ -13,7 +14,16 @@ def register_user(email, password):
     else:
         return "Registration failed"
 
-def confirm_registration(email, activation_token):
+def confirm_registration(email, activation_url):
+    # Extract activation token from the URL
+    parsed_url = urllib.parse.urlparse(activation_url)
+    query_params = urllib.parse.parse_qs(parsed_url.query)
+    activation_token = query_params.get('activation_token', [None])[0]
+
+    if not activation_token:
+        return "Invalid activation URL"
+
+    # Call the UserAuthenticationApp method to confirm registration
     url = 'http://localhost:8000/confirm'
     data = {'email': email, 'activation_token': activation_token}
     response = requests.post(url, data=data)
@@ -30,7 +40,7 @@ def authenticate_user(email, password):
 
 # Testing
 def test_user_authentication_app():
-    email = "test3@example.com"
+    email = "test@example.com"
     password = "password123"
 
     # Register user
@@ -42,8 +52,7 @@ def test_user_authentication_app():
         return
 
     # Confirm registration
-    activation_token = activation_url.split('=')[1]
-    confirmation_response = confirm_registration(email, activation_token)
+    confirmation_response = confirm_registration(email, activation_url)
     print("Confirmation response:", confirmation_response)
 
     # Authenticate user
