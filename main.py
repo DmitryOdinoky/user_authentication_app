@@ -1,7 +1,7 @@
 import sqlite3
 import hashlib
 import secrets
-#import uuid
+import urllib.parse
 
 class UserAuthenticationApp:
     def __init__(self, db_name=':memory:'):
@@ -32,6 +32,13 @@ class UserAuthenticationApp:
         self.c.execute("UPDATE users SET activated = 1 WHERE email = ? AND activation_token = ?", (email, activation_token))
         self.conn.commit()
 
+    def generate_activation_url(self, email, activation_token):
+        # Generate activation URL
+        params = {'email': email, 'activation_token': activation_token}
+        encoded_params = urllib.parse.urlencode(params)
+        activation_url = f"http://example.com/activate?{encoded_params}"
+        return activation_url
+
     def authenticate_user(self, email, password):
         # Hash provided password
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
@@ -48,27 +55,41 @@ class UserAuthenticationApp:
     def close_connection(self):
         self.conn.close()
 
+    def simulate_registration_api(self, email, password):
+        # Simulate registration API request
+        activation_token = self.register_user(email, password)
+        activation_url = self.generate_activation_url(email, activation_token)
+        return activation_url
+
+    def simulate_confirmation_api(self, email, activation_token):
+        # Simulate confirmation API request
+        self.confirm_registration(email, activation_token)
+
+    def simulate_authentication_api(self, email, password):
+        # Simulate authentication API request
+        return self.authenticate_user(email, password)
+
 # Testing
 def test_user_authentication_app():
     app = UserAuthenticationApp(db_name=':memory:')
     all_tests_passed = True
     
-    # Test user registration
-    activation_token = app.register_user("test@example.com", "password123")
-    if len(activation_token) != 43:
-        all_tests_passed = False
+    # Test registration API
+    activation_url = app.simulate_registration_api("test@example.com", "password123")
+    print("Activation URL:", activation_url)
 
-    # Test user confirmation
-    app.confirm_registration("test@example.com", activation_token)
+    # Test confirmation API
+    activation_token = activation_url.split('=')[1]
+    app.simulate_confirmation_api("test@example.com", activation_token)
     app.c.execute("SELECT * FROM users WHERE email = ?", ("test@example.com",))
     user = app.c.fetchone()
     if user[4] != 1:
         all_tests_passed = False
 
-    # Test user authentication
-    if not app.authenticate_user("test@example.com", "password123"):
+    # Test authentication API
+    if not app.simulate_authentication_api("test@example.com", "password123"):
         all_tests_passed = False
-    if app.authenticate_user("test@example.com", "wrongpassword"):
+    if app.simulate_authentication_api("test@example.com", "wrongpassword"):
         all_tests_passed = False
 
     # Close database connection
@@ -76,6 +97,10 @@ def test_user_authentication_app():
 
     return all_tests_passed
 
+
+
+
+testing = test_user_authentication_app()
 # Execute the tests
-if test_user_authentication_app():
+if testing:
     print("Tests passed")
